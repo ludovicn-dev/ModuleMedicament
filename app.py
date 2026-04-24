@@ -27,7 +27,7 @@ if not st.session_state.authentifie:
 
 # Icônes par forme galénique
 FORMES_ICONES = {
-    "comprimé": "⚪",
+    "comprimé": "⬜",
     "gélule": "💊",
     "solution injectable": "💉",
     "solution buvable": "🧴",
@@ -79,9 +79,8 @@ def chercher_bdpm(nom_medicament):
 
 def analyser_medicament(nom):
     donnees_bdpm = chercher_bdpm(nom)
-    
     if donnees_bdpm:
-        contexte_bdpm = f"Voici les données officielles BDPM pour ce médicament : {donnees_bdpm}"
+        contexte_bdpm = f"Voici les données officielles BDPM : {donnees_bdpm}"
     else:
         contexte_bdpm = "Aucune donnée BDPM trouvée, utilise tes connaissances générales."
 
@@ -124,99 +123,163 @@ Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou apr
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )
-
     texte = message.content[0].text
     debut = texte.find("{")
     fin = texte.rfind("}") + 1
-    json_pur = texte[debut:fin]
-    return json.loads(json_pur)
+    return json.loads(texte[debut:fin])
 
-# Interface
-st.set_page_config(page_title="Fiche Médicament", page_icon="💊", layout="centered")
-st.title("💊 Fiche Médicament")
-st.write("Recherchez un médicament pour obtenir sa fiche complète.")
+def analyser_interactions(medicaments):
+    prompt = f"""Tu es un pharmacien expert. Analyse toutes les interactions médicamenteuses entre ces médicaments : {', '.join(medicaments)}.
 
-with st.form(key="recherche_form"):
-    medicament = st.text_input("Nom du médicament (commercial ou DCI)",
-                               placeholder="Ex: Paracétamol, Amoxicilline... puis Entrée")
-    st.form_submit_button("🔍 Rechercher")
+Réponds UNIQUEMENT en JSON sans texte avant ou après :
+{{
+    "interactions": [
+        {{
+            "medicament1": "nom",
+            "medicament2": "nom",
+            "gravite": "modérée/sévère/contre-indiquée",
+            "description": "explication courte",
+            "conduite": "que faire"
+        }}
+    ],
+    "conclusion": "résumé global en 1-2 phrases"
+}}
 
-if medicament:
-    with st.spinner("Génération de la fiche..."):
-        try:
-            fiche = analyser_medicament(medicament)
-            info_locale = BASE_LOCALE.get(fiche["dci"].lower(), None)
+IMPORTANT : N'inclus PAS les interactions mineures, uniquement modérées, sévères et contre-indiquées."""
 
-            # En-tête
-            icone = get_icone_forme(fiche["forme"])
-            st.markdown(f"## {icone} {fiche['nom']} — {fiche['dci']}")
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    texte = message.content[0].text
+    debut = texte.find("{")
+    fin = texte.rfind("}") + 1
+    return json.loads(texte[debut:fin])
 
-            # Forme
-            forme_texte = fiche["forme"].capitalize()
-            if fiche.get("secable") == True:
-                forme_texte += " ✂️ sécable"
-            elif fiche.get("secable") == False:
-                forme_texte += " 🚫 non sécable"
-            st.info(f"**Forme :** {forme_texte}")
+# Interface principale
+st.set_page_config(page_title="Assistant Pharmacie", page_icon="💊", layout="centered")
+st.title("💊 Assistant Pharmacie")
 
-            # Informations principales
-            col1, col2 = st.columns(2)
-            with col1:
-                st.success(f"**📋 Indication**\n\n{fiche['indication']}")
-                st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}")
-                st.warning(f"**🔴 Dose max journalière**\n\n{fiche['dose_max_journaliere']}")
-                st.warning(f"**🫘 Insuffisance rénale**\n\n{fiche['posologie_insuf_renale']}")
-                st.info(f"**🚿 Administration**\n\n{fiche['administration']}")
-            with col2:
-                st.info(f"**❄️ Conservation**\n\n{fiche['conservation']}")
-                st.error(f"**⛔ Contre-indications**\n\n{fiche['contre_indications']}")
-                st.warning(f"**⚠️ Effets indésirables**\n\n{fiche['effets_indesirables']}")
+onglet1, onglet2 = st.tabs(["📋 Fiche Médicament", "⚠️ Interactions"])
 
-            # Compatibilité IV
-            if fiche.get("compatibilite_iv"):
-                st.info(f"**💉 Compatibilité IV**\n\n{fiche['compatibilite_iv']}")
+# ========== ONGLET 1 — FICHE MÉDICAMENT ==========
+with onglet1:
+    st.write("Recherchez un médicament pour obtenir sa fiche complète.")
 
-            # Section Plus de détails
-            with st.expander("➕ Plus de détails"):
-                if fiche.get("ecrasable"):
-                    st.write(f"🔨 Écrasable : {fiche['ecrasable']}")
-                if fiche.get("ouvrable"):
-                    st.write(f"💊 Ouvrable : {fiche['ouvrable']}")
-                if fiche.get("administration_sng"):
-                    st.write(f"🧪 Sonde nasogastrique : {fiche['administration_sng']}")
-                if fiche.get("delai_action"):
-                    st.write(f"⏱️ Délai d'action : {fiche['delai_action']}")
-                if fiche.get("photosensible"):
-                    st.warning("☀️ Photosensible — protéger de la lumière")
-                if fiche.get("classe_therapeutique"):
-                    st.write(f"🏷️ Classe : {fiche['classe_therapeutique']}")
-                if fiche.get("usage_hospitalier"):
-                    st.error("🏥 Réservé à l'usage hospitalier")
-                if fiche.get("stupefiants"):
-                    st.error("🔒 Stupéfiant — ordonnance sécurisée obligatoire")
-                if fiche.get("marge_etroite"):
-                    st.warning("⚠️ Marge thérapeutique étroite — surveillance renforcée")
-                if fiche.get("surveillance_bio"):
-                    st.write(f"🔬 Surveillance bio : {fiche['surveillance_bio']}")
-                if fiche.get("surveillance_clinique"):
-                    st.write(f"🩺 Surveillance clinique : {fiche['surveillance_clinique']}")
-                if fiche.get("grossesse"):
-                    st.write(f"🤰 Grossesse/Allaitement : {fiche['grossesse']}")
-                if fiche.get("alternatives"):
-                    st.write(f"💡 Alternatives : {fiche['alternatives']}")
+    with st.form(key="recherche_form"):
+        medicament = st.text_input("Nom du médicament (commercial ou DCI)",
+                                   placeholder="Ex: Paracétamol, Amoxicilline... puis Entrée")
+        st.form_submit_button("🔍 Rechercher")
 
-            # Spécificités calédoniennes
-            if info_locale:
-                st.divider()
-                st.markdown("### 🌺 Spécificités Nouvelle-Calédonie")
-                if info_locale["disponible_nc"]:
-                    st.success("✅ Disponible en NC")
-                else:
-                    st.error("❌ Non disponible en NC")
-                if info_locale.get("equivalents_nc"):
-                    st.info(f"**Équivalents disponibles :** {', '.join(info_locale['equivalents_nc'])}")
-                if info_locale.get("remarque"):
-                    st.warning(f"**Remarque :** {info_locale['remarque']}")
+    if medicament:
+        with st.spinner("Génération de la fiche..."):
+            try:
+                fiche = analyser_medicament(medicament)
+                info_locale = BASE_LOCALE.get(fiche["dci"].lower(), None)
 
-        except Exception as e:
-            st.error(f"Erreur : {e}")
+                icone = get_icone_forme(fiche["forme"])
+                st.markdown(f"## {icone} {fiche['nom']} — {fiche['dci']}")
+
+                forme_texte = fiche["forme"].capitalize()
+                if fiche.get("secable") == True:
+                    forme_texte += " ✂️ sécable"
+                elif fiche.get("secable") == False:
+                    forme_texte += " 🚫 non sécable"
+                st.info(f"**Forme :** {forme_texte}")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.success(f"**📋 Indication**\n\n{fiche['indication']}")
+                    st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}")
+                    st.warning(f"**🔴 Dose max journalière**\n\n{fiche['dose_max_journaliere']}")
+                    st.warning(f"**🫘 Insuffisance rénale**\n\n{fiche['posologie_insuf_renale']}")
+                    st.info(f"**🚿 Administration**\n\n{fiche['administration']}")
+                with col2:
+                    st.info(f"**❄️ Conservation**\n\n{fiche['conservation']}")
+                    st.error(f"**⛔ Contre-indications**\n\n{fiche['contre_indications']}")
+                    st.warning(f"**⚠️ Effets indésirables**\n\n{fiche['effets_indesirables']}")
+
+                if fiche.get("compatibilite_iv"):
+                    st.info(f"**💉 Compatibilité IV**\n\n{fiche['compatibilite_iv']}")
+
+                with st.expander("➕ Plus de détails"):
+                    if fiche.get("ecrasable"):
+                        st.write(f"🔨 Écrasable : {fiche['ecrasable']}")
+                    if fiche.get("ouvrable"):
+                        st.write(f"💊 Ouvrable : {fiche['ouvrable']}")
+                    if fiche.get("administration_sng"):
+                        st.write(f"🧪 Sonde nasogastrique : {fiche['administration_sng']}")
+                    if fiche.get("delai_action"):
+                        st.write(f"⏱️ Délai d'action : {fiche['delai_action']}")
+                    if fiche.get("photosensible"):
+                        st.warning("☀️ Photosensible — protéger de la lumière")
+                    if fiche.get("classe_therapeutique"):
+                        st.write(f"🏷️ Classe : {fiche['classe_therapeutique']}")
+                    if fiche.get("usage_hospitalier"):
+                        st.error("🏥 Réservé à l'usage hospitalier")
+                    if fiche.get("stupefiants"):
+                        st.error("🔒 Stupéfiant — ordonnance sécurisée obligatoire")
+                    if fiche.get("marge_etroite"):
+                        st.warning("⚠️ Marge thérapeutique étroite — surveillance renforcée")
+                    if fiche.get("surveillance_bio"):
+                        st.write(f"🔬 Surveillance bio : {fiche['surveillance_bio']}")
+                    if fiche.get("surveillance_clinique"):
+                        st.write(f"🩺 Surveillance clinique : {fiche['surveillance_clinique']}")
+                    if fiche.get("grossesse"):
+                        st.write(f"🤰 Grossesse/Allaitement : {fiche['grossesse']}")
+                    if fiche.get("alternatives"):
+                        st.write(f"💡 Alternatives : {fiche['alternatives']}")
+
+                if info_locale:
+                    st.divider()
+                    st.markdown("### 🌺 Spécificités Nouvelle-Calédonie")
+                    if info_locale["disponible_nc"]:
+                        st.success("✅ Disponible en NC")
+                    else:
+                        st.error("❌ Non disponible en NC")
+                    if info_locale.get("equivalents_nc"):
+                        st.info(f"**Équivalents disponibles :** {', '.join(info_locale['equivalents_nc'])}")
+                    if info_locale.get("remarque"):
+                        st.warning(f"**Remarque :** {info_locale['remarque']}")
+
+            except Exception as e:
+                st.error(f"Erreur : {e}")
+
+# ========== ONGLET 2 — INTERACTIONS ==========
+with onglet2:
+    st.write("Analysez les interactions entre plusieurs médicaments simultanément.")
+
+    with st.form(key="interactions_form"):
+        medicaments_liste = st.text_input(
+            "Entrez les médicaments séparés par des virgules",
+            placeholder="Ex: Warfarine, Ibuprofène, Aspirine, Metformine"
+        )
+        st.form_submit_button("⚠️ Analyser les interactions")
+
+    if medicaments_liste:
+        medicaments = [m.strip() for m in medicaments_liste.split(",") if m.strip()]
+        if len(medicaments) < 2:
+            st.warning("Entrez au moins 2 médicaments")
+        else:
+            with st.spinner("Analyse des interactions en cours..."):
+                try:
+                    resultat = analyser_interactions(medicaments)
+
+                    if not resultat["interactions"]:
+                        st.success("✅ Aucune interaction significative détectée entre ces médicaments.")
+                    else:
+                        for interaction in resultat["interactions"]:
+                            gravite = interaction["gravite"].lower()
+                            titre = f"**{interaction['medicament1']} + {interaction['medicament2']}** — {interaction['gravite'].upper()}"
+                            detail = f"\n\n{interaction['description']}\n\n**À faire :** {interaction['conduite']}"
+                            if "sévère" in gravite or "contre" in gravite:
+                                st.error(f"🚨 {titre}{detail}")
+                            else:
+                                st.warning(f"⚠️ {titre}{detail}")
+
+                    st.divider()
+                    st.success(f"**Conclusion :** {resultat['conclusion']}")
+
+                except Exception as e:
+                    st.error(f"Erreur : {e}")
