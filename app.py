@@ -8,6 +8,23 @@ from dotenv import load_dotenv
 load_dotenv()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+# Vérification mot de passe
+MOT_DE_PASSE = os.environ.get("PASSWORD", "")
+
+if "authentifie" not in st.session_state:
+    st.session_state.authentifie = False
+
+if not st.session_state.authentifie:
+    st.title("🔒 Accès restreint")
+    mdp = st.text_input("Mot de passe", type="password")
+    if st.button("Se connecter"):
+        if mdp == MOT_DE_PASSE:
+            st.session_state.authentifie = True
+            st.rerun()
+        else:
+            st.error("Mot de passe incorrect")
+    st.stop()
+
 # Icônes par forme galénique
 FORMES_ICONES = {
     "comprimé": "⚪",
