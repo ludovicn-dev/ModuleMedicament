@@ -80,11 +80,17 @@ def chercher_bdpm(nom_medicament):
 def analyser_medicament(nom):
     donnees_bdpm = chercher_bdpm(nom)
     if donnees_bdpm:
-        contexte_bdpm = f"Voici les données officielles BDPM : {donnees_bdpm}"
+        contexte_bdpm = f"""Voici les données officielles BDPM pour ce médicament : {donnees_bdpm}
+IMPORTANT : Utilise UNIQUEMENT ces données officielles pour la DCI et le nom. Ne les modifie jamais."""
     else:
-        contexte_bdpm = "Aucune donnée BDPM trouvée, utilise tes connaissances générales."
+        contexte_bdpm = """ATTENTION : Ce médicament n'a pas été trouvé dans la base officielle BDPM.
+Indique clairement dans ton JSON que les informations sont non vérifiées en mettant 
+"dci": "⚠️ Non vérifié - consulter le RCP officiel" si tu n'es pas certain."""
 
     prompt = f"""Tu es un pharmacien expert. Donne-moi une fiche complète sur le médicament "{nom}".
+
+    if not chercher_bdpm(medicament):
+                    st.warning("⚠️ Ce médicament n'a pas été trouvé dans la base officielle BDPM. Les informations ci-dessous sont générées par IA et doivent être vérifiées avant tout usage clinique.")
 
 {contexte_bdpm}
 
@@ -287,6 +293,9 @@ with onglet1:
 
             except Exception as e:
                 st.error(f"Erreur : {e}")
+
+                st.divider()
+    st.caption("⚠️ Cet outil est une aide à la décision. Les informations doivent toujours être vérifiées sur le RCP officiel avant tout usage clinique.")
 
 # ========== ONGLET 2 — INTERACTIONS ==========
 with onglet2:
