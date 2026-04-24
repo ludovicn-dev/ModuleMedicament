@@ -67,7 +67,8 @@ def get_icone_forme(forme):
 
 def chercher_bdpm(nom_medicament):
     try:
-        url = f"https://base-donnees-publique.medicaments.gouv.fr/api/v1/medicament?denomination={nom_medicament}"
+        # Nouvelle API BDPM améliorée
+        url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament}"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
