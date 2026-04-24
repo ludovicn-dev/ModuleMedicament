@@ -27,7 +27,7 @@ if not st.session_state.authentifie:
 
 # Icônes par forme galénique
 FORMES_ICONES = {
-    "comprimé": "⬜",
+    "comprimé": "⚪",
     "gélule": "💊",
     "solution injectable": "💉",
     "solution buvable": "🧴",
@@ -49,7 +49,7 @@ BASE_LOCALE = {
     "amoxicilline": {
         "disponible_nc": True,
         "equivalents_nc": ["Clamoxyl", "Amoxil"],
-        "remarque": "Rupture fréquente en NC — prévoir Augmentin si besoin"
+        "remarque": "Disponible en grande quantité en NC"
     },
     "warfarine": {
         "disponible_nc": True,
@@ -182,21 +182,17 @@ with onglet1:
                 st.markdown(f"## {icone} {fiche['nom']} — {fiche['dci']}")
 
                 forme_texte = fiche["forme"].capitalize()
-                if fiche.get("secable") == True:
-                    forme_texte += " ✂️ sécable"
-                elif fiche.get("secable") == False:
-                    forme_texte += " 🚫 non sécable"
+                
                 st.info(f"**Forme :** {forme_texte}")
 
                 col1, col2 = st.columns(2)
                 with col1:
                     st.success(f"**📋 Indication**\n\n{fiche['indication']}")
-                    st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}")
-                    st.warning(f"**🔴 Dose max journalière**\n\n{fiche['dose_max_journaliere']}")
+                    st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}\n\n**Dose max journalière :** {fiche['dose_max_journaliere']}")
                     st.warning(f"**🫘 Insuffisance rénale**\n\n{fiche['posologie_insuf_renale']}")
-                    st.info(f"**🚿 Administration**\n\n{fiche['administration']}")
+                    st.info(f"**👩🏻‍⚕️ Administration**\n\n{fiche['administration']}")
                 with col2:
-                    st.info(f"**❄️ Conservation**\n\n{fiche['conservation']}")
+                    st.info(f"**❄️☀️ Conservation**\n\n{fiche['conservation']}")
                     st.error(f"**⛔ Contre-indications**\n\n{fiche['contre_indications']}")
                     st.warning(f"**⚠️ Effets indésirables**\n\n{fiche['effets_indesirables']}")
 
@@ -208,6 +204,10 @@ with onglet1:
                         st.write(f"🔨 Écrasable : {fiche['ecrasable']}")
                     if fiche.get("ouvrable"):
                         st.write(f"💊 Ouvrable : {fiche['ouvrable']}")
+                    if fiche.get("secable") == True:
+                        st.write("✂️ Sécable : oui")
+                    elif fiche.get("secable") == False:
+                        st.write("🚫 Sécable : non")
                     if fiche.get("administration_sng"):
                         st.write(f"🧪 Sonde nasogastrique : {fiche['administration_sng']}")
                     if fiche.get("delai_action"):
