@@ -171,7 +171,7 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
 
-html, body, p, span, h1, h2, h3, h4, input, button, label, .stMarkdown {
+p, h1, h2, h3, h4, input, button, label {
     font-family: 'Nunito', sans-serif !important;
 }
 
@@ -191,12 +191,6 @@ div.stButton > button:hover {
     background-color: #00695C;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,137,123,0.3);
-}
-
-div.stForm > div {
-    border-radius: 16px;
-    border: 1px solid #B2DFDB;
-    padding: 20px;
 }
 
 h1, h2, h3 {
