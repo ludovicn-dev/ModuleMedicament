@@ -27,7 +27,7 @@ if not st.session_state.authentifie:
 
 # Icônes par forme galénique
 FORMES_ICONES = {
-    "comprimé": "⚪",
+    "comprimé": "⬜",
     "gélule": "💊",
     "solution injectable": "💉",
     "solution buvable": "🧴",
@@ -48,8 +48,8 @@ BASE_LOCALE = {
     },
     "amoxicilline": {
         "disponible_nc": True,
-        "equivalents_nc": ["Clamoxyl"],
-        "remarque": "Disponible en grande quantité en NC"
+        "equivalents_nc": ["Clamoxyl", "Amoxil"],
+        "remarque": "Rupture fréquente en NC — prévoir Augmentin si besoin"
     },
     "warfarine": {
         "disponible_nc": True,
@@ -87,9 +87,6 @@ IMPORTANT : Utilise ces données pour confirmer la DCI et le nom commercial."""
 
     prompt = f"""Tu es un pharmacien expert. Donne-moi une fiche complète sur le médicament "{nom}".
 
-    if not chercher_bdpm(medicament):
-                    st.warning("⚠️ Ce médicament n'a pas été trouvé dans la base officielle BDPM. Les informations ci-dessous sont générées par IA et doivent être vérifiées avant tout usage clinique.")
-
 {contexte_bdpm}
 
 Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou après :
@@ -99,9 +96,8 @@ Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou apr
     "forme": "forme galénique (comprimé/gélule/solution injectable/etc)",
     "secable": true,
     "indication": "indication principale en 1-2 phrases",
-    "posologie_standard": "posologie standard adulte",
+    "posologie_standard": "posologie standard adulte + dose max journalière",
     "posologie_insuf_renale": "adaptation posologique en cas d'insuffisance rénale",
-    "dose_max_journaliere": "dose maximale journalière",
     "administration": "mode d'administration",
     "conservation": "conditions de conservation",
     "contre_indications": "principales contre-indications",
@@ -213,6 +209,10 @@ with onglet1:
         st.form_submit_button("🔍 Rechercher")
 
     if medicament:
+        bdpm = chercher_bdpm(medicament)
+        if not bdpm:
+            st.warning("⚠️ Médicament non trouvé dans la base officielle BDPM. Les informations sont générées par IA — à vérifier avant tout usage clinique.")
+
         with st.spinner("Génération de la fiche..."):
             try:
                 fiche = analyser_medicament(medicament)
@@ -222,17 +222,16 @@ with onglet1:
                 st.markdown(f"## {icone} {fiche['nom']} — {fiche['dci']}")
 
                 forme_texte = fiche["forme"].capitalize()
-                
                 st.info(f"**Forme :** {forme_texte}")
 
                 col1, col2 = st.columns(2)
                 with col1:
                     st.success(f"**📋 Indication**\n\n{fiche['indication']}")
-                    st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}\n\n**Dose max journalière :** {fiche['dose_max_journaliere']}")
+                    st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}")
                     st.warning(f"**🫘 Insuffisance rénale**\n\n{fiche['posologie_insuf_renale']}")
-                    st.info(f"**👩🏻‍⚕️ Administration**\n\n{fiche['administration']}")
+                    st.info(f"**🚿 Administration**\n\n{fiche['administration']}")
                 with col2:
-                    st.info(f"**❄️☀️ Conservation**\n\n{fiche['conservation']}")
+                    st.info(f"**❄️ Conservation**\n\n{fiche['conservation']}")
                     st.error(f"**⛔ Contre-indications**\n\n{fiche['contre_indications']}")
                     st.warning(f"**⚠️ Effets indésirables**\n\n{fiche['effets_indesirables']}")
 
@@ -240,14 +239,14 @@ with onglet1:
                     st.info(f"**💉 Compatibilité IV**\n\n{fiche['compatibilite_iv']}")
 
                 with st.expander("➕ Plus de détails"):
-                    if fiche.get("ecrasable"):
-                        st.write(f"🔨 Écrasable : {fiche['ecrasable']}")
-                    if fiche.get("ouvrable"):
-                        st.write(f"💊 Ouvrable : {fiche['ouvrable']}")
                     if fiche.get("secable") == True:
                         st.write("✂️ Sécable : oui")
                     elif fiche.get("secable") == False:
                         st.write("🚫 Sécable : non")
+                    if fiche.get("ecrasable"):
+                        st.write(f"🔨 Écrasable : {fiche['ecrasable']}")
+                    if fiche.get("ouvrable"):
+                        st.write(f"💊 Ouvrable : {fiche['ouvrable']}")
                     if fiche.get("administration_sng"):
                         st.write(f"🧪 Sonde nasogastrique : {fiche['administration_sng']}")
                     if fiche.get("delai_action"):
@@ -286,7 +285,7 @@ with onglet1:
             except Exception as e:
                 st.error(f"Erreur : {e}")
 
-                st.divider()
+    st.divider()
     st.caption("⚠️ Cet outil est une aide à la décision. Les informations doivent toujours être vérifiées sur le RCP officiel avant tout usage clinique.")
 
 # ========== ONGLET 2 — INTERACTIONS ==========
@@ -326,3 +325,6 @@ with onglet2:
 
                 except Exception as e:
                     st.error(f"Erreur : {e}")
+
+    st.divider()
+    st.caption("⚠️ Cet outil est une aide à la décision. Les informations doivent toujours être vérifiées avant tout usage clinique.")
