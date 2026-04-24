@@ -48,7 +48,7 @@ BASE_LOCALE = {
     },
     "amoxicilline": {
         "disponible_nc": True,
-        "equivalents_nc": ["Clamoxyl", "Amoxil"],
+        "equivalents_nc": ["Clamoxyl"],
         "remarque": "Disponible en grande quantité en NC"
     },
     "warfarine": {
@@ -159,6 +159,48 @@ IMPORTANT : N'inclus PAS les interactions mineures, uniquement modérées, sév�
 
 # Interface principale
 st.set_page_config(page_title="Assistant Pharmacie", page_icon="💊", layout="centered")
+
+# Style personnalisé
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
+
+* {
+    font-family: 'Nunito', sans-serif !important;
+}
+
+div.stButton > button {
+    background-color: #00897B;
+    color: white;
+    border-radius: 12px;
+    border: none;
+    padding: 10px 24px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    transition: 0.3s;
+}
+
+div.stButton > button:hover {
+    background-color: #00695C;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,137,123,0.3);
+}
+
+div.stForm > div {
+    border-radius: 16px;
+    border: 1px solid #B2DFDB;
+    padding: 20px;
+}
+
+h1, h2, h3 {
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 700;
+    color: #00695C;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("💊 Assistant Pharmacie")
 
 onglet1, onglet2 = st.tabs(["📋 Fiche Médicament", "⚠️ Interactions"])
