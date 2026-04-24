@@ -1,0 +1,205 @@
+import streamlit as st
+import anthropic
+import requests
+import os
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+# Icônes par forme galénique
+FORMES_ICONES = {
+    "comprimé": "⚪",
+    "gélule": "💊",
+    "solution injectable": "💉",
+    "solution buvable": "🧴",
+    "patch": "🩹",
+    "suppositoire": "🔵",
+    "pommade": "🫙",
+    "collyre": "👁️",
+    "spray": "💨",
+    "sachet": "📦",
+}
+
+# Base locale calédonienne
+BASE_LOCALE = {
+    "paracetamol": {
+        "disponible_nc": True,
+        "equivalents_nc": ["Doliprane", "Efferalgan", "Dafalgan"],
+        "remarque": "Disponible en grande quantité en NC"
+    },
+    "amoxicilline": {
+        "disponible_nc": True,
+        "equivalents_nc": ["Clamoxyl", "Amoxil"],
+        "remarque": "Rupture fréquente en NC — prévoir Augmentin si besoin"
+    },
+    "warfarine": {
+        "disponible_nc": True,
+        "usage_hospitalier": False,
+        "equivalents_nc": ["Coumadine"],
+        "remarque": "Disponible en ville — surveillance INR obligatoire"
+    },
+}
+
+def get_icone_forme(forme):
+    for key, icone in FORMES_ICONES.items():
+        if key in forme.lower():
+            return icone
+    return "💊"
+
+def chercher_bdpm(nom_medicament):
+    try:
+        url = f"https://base-donnees-publique.medicaments.gouv.fr/api/v1/medicament?denomination={nom_medicament}"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                return data[0]
+        return None
+    except:
+        return None
+
+def analyser_medicament(nom):
+    donnees_bdpm = chercher_bdpm(nom)
+    
+    if donnees_bdpm:
+        contexte_bdpm = f"Voici les données officielles BDPM pour ce médicament : {donnees_bdpm}"
+    else:
+        contexte_bdpm = "Aucune donnée BDPM trouvée, utilise tes connaissances générales."
+
+    prompt = f"""Tu es un pharmacien expert. Donne-moi une fiche complète sur le médicament "{nom}".
+
+{contexte_bdpm}
+
+Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou après :
+{{
+    "nom": "nom commercial",
+    "dci": "dénomination commune internationale",
+    "forme": "forme galénique (comprimé/gélule/solution injectable/etc)",
+    "secable": true,
+    "indication": "indication principale en 1-2 phrases",
+    "posologie_standard": "posologie standard adulte",
+    "posologie_insuf_renale": "adaptation posologique en cas d'insuffisance rénale",
+    "dose_max_journaliere": "dose maximale journalière",
+    "administration": "mode d'administration",
+    "conservation": "conditions de conservation",
+    "contre_indications": "principales contre-indications",
+    "effets_indesirables": "effets indésirables fréquents",
+    "compatibilite_iv": "compatibilités IV principales ou null si non injectable",
+    "ecrasable": "oui/non/non applicable - avec explication courte",
+    "ouvrable": "oui/non/non applicable - pour les gélules",
+    "classe_therapeutique": "classe thérapeutique du médicament",
+    "usage_hospitalier": false,
+    "stupefiants": false,
+    "marge_etroite": false,
+    "surveillance_bio": "surveillance biologique recommandée ou null",
+    "delai_action": "délai d'action et durée d'effet",
+    "administration_sng": "administration par sonde nasogastrique - oui/non/avec précautions",
+    "photosensible": false,
+    "grossesse": "catégorie de risque grossesse et allaitement",
+    "alternatives": "principales alternatives thérapeutiques",
+    "surveillance_clinique": "surveillance clinique recommandée"
+}}"""
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    texte = message.content[0].text
+    debut = texte.find("{")
+    fin = texte.rfind("}") + 1
+    json_pur = texte[debut:fin]
+    return json.loads(json_pur)
+
+# Interface
+st.set_page_config(page_title="Fiche Médicament", page_icon="💊", layout="centered")
+st.title("💊 Fiche Médicament")
+st.write("Recherchez un médicament pour obtenir sa fiche complète.")
+
+with st.form(key="recherche_form"):
+    medicament = st.text_input("Nom du médicament (commercial ou DCI)",
+                               placeholder="Ex: Paracétamol, Amoxicilline... puis Entrée")
+    st.form_submit_button("🔍 Rechercher")
+
+if medicament:
+    with st.spinner("Génération de la fiche..."):
+        try:
+            fiche = analyser_medicament(medicament)
+            info_locale = BASE_LOCALE.get(fiche["dci"].lower(), None)
+
+            # En-tête
+            icone = get_icone_forme(fiche["forme"])
+            st.markdown(f"## {icone} {fiche['nom']} — {fiche['dci']}")
+
+            # Forme
+            forme_texte = fiche["forme"].capitalize()
+            if fiche.get("secable") == True:
+                forme_texte += " ✂️ sécable"
+            elif fiche.get("secable") == False:
+                forme_texte += " 🚫 non sécable"
+            st.info(f"**Forme :** {forme_texte}")
+
+            # Informations principales
+            col1, col2 = st.columns(2)
+            with col1:
+                st.success(f"**📋 Indication**\n\n{fiche['indication']}")
+                st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}")
+                st.warning(f"**🔴 Dose max journalière**\n\n{fiche['dose_max_journaliere']}")
+                st.warning(f"**🫘 Insuffisance rénale**\n\n{fiche['posologie_insuf_renale']}")
+                st.info(f"**🚿 Administration**\n\n{fiche['administration']}")
+            with col2:
+                st.info(f"**❄️ Conservation**\n\n{fiche['conservation']}")
+                st.error(f"**⛔ Contre-indications**\n\n{fiche['contre_indications']}")
+                st.warning(f"**⚠️ Effets indésirables**\n\n{fiche['effets_indesirables']}")
+
+            # Compatibilité IV
+            if fiche.get("compatibilite_iv"):
+                st.info(f"**💉 Compatibilité IV**\n\n{fiche['compatibilite_iv']}")
+
+            # Section Plus de détails
+            with st.expander("➕ Plus de détails"):
+                if fiche.get("ecrasable"):
+                    st.write(f"🔨 Écrasable : {fiche['ecrasable']}")
+                if fiche.get("ouvrable"):
+                    st.write(f"💊 Ouvrable : {fiche['ouvrable']}")
+                if fiche.get("administration_sng"):
+                    st.write(f"🧪 Sonde nasogastrique : {fiche['administration_sng']}")
+                if fiche.get("delai_action"):
+                    st.write(f"⏱️ Délai d'action : {fiche['delai_action']}")
+                if fiche.get("photosensible"):
+                    st.warning("☀️ Photosensible — protéger de la lumière")
+                if fiche.get("classe_therapeutique"):
+                    st.write(f"🏷️ Classe : {fiche['classe_therapeutique']}")
+                if fiche.get("usage_hospitalier"):
+                    st.error("🏥 Réservé à l'usage hospitalier")
+                if fiche.get("stupefiants"):
+                    st.error("🔒 Stupéfiant — ordonnance sécurisée obligatoire")
+                if fiche.get("marge_etroite"):
+                    st.warning("⚠️ Marge thérapeutique étroite — surveillance renforcée")
+                if fiche.get("surveillance_bio"):
+                    st.write(f"🔬 Surveillance bio : {fiche['surveillance_bio']}")
+                if fiche.get("surveillance_clinique"):
+                    st.write(f"🩺 Surveillance clinique : {fiche['surveillance_clinique']}")
+                if fiche.get("grossesse"):
+                    st.write(f"🤰 Grossesse/Allaitement : {fiche['grossesse']}")
+                if fiche.get("alternatives"):
+                    st.write(f"💡 Alternatives : {fiche['alternatives']}")
+
+            # Spécificités calédoniennes
+            if info_locale:
+                st.divider()
+                st.markdown("### 🌺 Spécificités Nouvelle-Calédonie")
+                if info_locale["disponible_nc"]:
+                    st.success("✅ Disponible en NC")
+                else:
+                    st.error("❌ Non disponible en NC")
+                if info_locale.get("equivalents_nc"):
+                    st.info(f"**Équivalents disponibles :** {', '.join(info_locale['equivalents_nc'])}")
+                if info_locale.get("remarque"):
+                    st.warning(f"**Remarque :** {info_locale['remarque']}")
+
+        except Exception as e:
+            st.error(f"Erreur : {e}")
