@@ -80,12 +80,10 @@ def chercher_bdpm(nom_medicament):
 def analyser_medicament(nom):
     donnees_bdpm = chercher_bdpm(nom)
     if donnees_bdpm:
-        contexte_bdpm = f"""Voici les données officielles BDPM pour ce médicament : {donnees_bdpm}
-IMPORTANT : Utilise UNIQUEMENT ces données officielles pour la DCI et le nom. Ne les modifie jamais."""
+        contexte_bdpm = f"""Voici les données officielles BDPM : {donnees_bdpm}
+IMPORTANT : Utilise ces données pour confirmer la DCI et le nom commercial."""
     else:
-        contexte_bdpm = """ATTENTION : Ce médicament n'a pas été trouvé dans la base officielle BDPM.
-Indique clairement dans ton JSON que les informations sont non vérifiées en mettant 
-"dci": "⚠️ Non vérifié - consulter le RCP officiel" si tu n'es pas certain."""
+        contexte_bdpm = "Utilise tes connaissances générales mais sois rigoureux sur la DCI et le nom commercial."
 
     prompt = f"""Tu es un pharmacien expert. Donne-moi une fiche complète sur le médicament "{nom}".
 
