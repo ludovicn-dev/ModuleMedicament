@@ -165,7 +165,7 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
 
-* {
+html, body, p, div, span, h1, h2, h3, h4, input, button, label {
     font-family: 'Nunito', sans-serif !important;
 }
 
