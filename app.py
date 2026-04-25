@@ -67,7 +67,6 @@ def get_icone_forme(forme):
 
 def chercher_bdpm(nom_medicament):
     try:
-        # Nouvelle API BDPM améliorée
         url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament}"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
@@ -78,13 +77,34 @@ def chercher_bdpm(nom_medicament):
     except:
         return None
 
+def extraire_dci_bdpm(donnees_bdpm):
+    try:
+        # Cherche la DCI dans les données BDPM
+        if "compositions" in donnees_bdpm:
+            for compo in donnees_bdpm["compositions"]:
+                if "denominationSubstance" in compo:
+                    return compo["denominationSubstance"]
+        if "denomination" in donnees_bdpm:
+            return donnees_bdpm["denomination"]
+        return None
+    except:
+        return None
+
 def analyser_medicament(nom):
     donnees_bdpm = chercher_bdpm(nom)
+    dci_officielle = None
+    
     if donnees_bdpm:
-        contexte_bdpm = f"""Voici les données officielles BDPM : {donnees_bdpm}
-IMPORTANT : Utilise ces données pour confirmer la DCI et le nom commercial."""
+        dci_officielle = extraire_dci_bdpm(donnees_bdpm)
+    
+    if dci_officielle:
+        contexte_bdpm = f"""DONNÉES OFFICIELLES BDPM VÉRIFIÉES :
+- Nom commercial : {nom}
+- DCI officielle : {dci_officielle}
+
+RÈGLE ABSOLUE : Tu DOIS utiliser exactement "{dci_officielle}" comme DCI. Ne la modifie JAMAIS."""
     else:
-        contexte_bdpm = "Utilise tes connaissances générales mais sois rigoureux sur la DCI et le nom commercial."
+        contexte_bdpm = f"Utilise tes connaissances sur le médicament '{nom}' en étant rigoureux sur la DCI."
 
     prompt = f"""Tu es un pharmacien expert. Donne-moi une fiche complète sur le médicament "{nom}".
 
@@ -92,8 +112,8 @@ IMPORTANT : Utilise ces données pour confirmer la DCI et le nom commercial."""
 
 Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou après :
 {{
-    "nom": "nom commercial",
-    "dci": "dénomination commune internationale",
+    "nom": "{nom}",
+    "dci": "{'dci_officielle si disponible, sinon DCI correcte du médicament'}",
     "forme": "forme galénique (comprimé/gélule/solution injectable/etc)",
     "secable": true,
     "indication": "indication principale en 1-2 phrases",
@@ -127,7 +147,13 @@ Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou apr
     texte = message.content[0].text
     debut = texte.find("{")
     fin = texte.rfind("}") + 1
-    return json.loads(texte[debut:fin])
+    resultat = json.loads(texte[debut:fin])
+    
+    # Forcer la DCI officielle si disponible
+    if dci_officielle:
+        resultat["dci"] = dci_officielle
+    
+    return resultat
 
 def analyser_interactions(medicaments):
     prompt = f"""Tu es un pharmacien expert. Analyse toutes les interactions médicamenteuses entre ces médicaments : {', '.join(medicaments)}.
