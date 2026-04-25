@@ -4,6 +4,7 @@ import requests
 import os
 import json
 from dotenv import load_dotenv
+from base_locale import NOMS_COMMERCIAUX, BASE_NC
 
 load_dotenv()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -39,26 +40,6 @@ FORMES_ICONES = {
     "sachet": "📦",
 }
 
-# Base locale calédonienne
-BASE_LOCALE = {
-    "paracetamol": {
-        "disponible_nc": True,
-        "equivalents_nc": ["Doliprane", "Efferalgan", "Dafalgan"],
-        "remarque": "Disponible en grande quantité en NC"
-    },
-    "amoxicilline": {
-        "disponible_nc": True,
-        "equivalents_nc": ["Clamoxyl", "Amoxil"],
-        "remarque": "Rupture fréquente en NC — prévoir Augmentin si besoin"
-    },
-    "warfarine": {
-        "disponible_nc": True,
-        "usage_hospitalier": False,
-        "equivalents_nc": ["Coumadine"],
-        "remarque": "Disponible en ville — surveillance INR obligatoire"
-    },
-}
-
 def get_icone_forme(forme):
     for key, icone in FORMES_ICONES.items():
         if key in forme.lower():
@@ -79,7 +60,6 @@ def chercher_bdpm(nom_medicament):
 
 def extraire_dci_bdpm(donnees_bdpm):
     try:
-        # Cherche la DCI dans les données BDPM
         if "compositions" in donnees_bdpm:
             for compo in donnees_bdpm["compositions"]:
                 if "denominationSubstance" in compo:
@@ -91,20 +71,23 @@ def extraire_dci_bdpm(donnees_bdpm):
         return None
 
 def analyser_medicament(nom):
-    donnees_bdpm = chercher_bdpm(nom)
-    dci_officielle = None
-    
-    if donnees_bdpm:
-        dci_officielle = extraire_dci_bdpm(donnees_bdpm)
-    
-    if dci_officielle:
-        contexte_bdpm = f"""DONNÉES OFFICIELLES BDPM VÉRIFIÉES :
-- Nom commercial : {nom}
-- DCI officielle : {dci_officielle}
+    # Vérifier dans la base locale des noms commerciaux
+    dci_locale = NOMS_COMMERCIAUX.get(nom.lower(), None)
 
-RÈGLE ABSOLUE : Tu DOIS utiliser exactement "{dci_officielle}" comme DCI. Ne la modifie JAMAIS."""
+    # Chercher dans la BDPM
+    donnees_bdpm = chercher_bdpm(dci_locale if dci_locale else nom)
+    dci_officielle = dci_locale
+
+    if not dci_officielle and donnees_bdpm:
+        dci_officielle = extraire_dci_bdpm(donnees_bdpm)
+
+    if dci_officielle:
+        contexte_bdpm = f"""DONNÉES VÉRIFIÉES :
+- Nom recherché : {nom}
+- DCI confirmée : {dci_officielle}
+RÈGLE ABSOLUE : Utilise exactement "{dci_officielle}" comme DCI sans la modifier."""
     else:
-        contexte_bdpm = f"Utilise tes connaissances sur le médicament '{nom}' en étant rigoureux sur la DCI."
+        contexte_bdpm = f"Utilise tes connaissances sur '{nom}' en étant rigoureux sur la DCI."
 
     prompt = f"""Tu es un pharmacien expert. Donne-moi une fiche complète sur le médicament "{nom}".
 
@@ -112,8 +95,8 @@ RÈGLE ABSOLUE : Tu DOIS utiliser exactement "{dci_officielle}" comme DCI. Ne la
 
 Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou après :
 {{
-    "nom": "{nom}",
-    "dci": "{'dci_officielle si disponible, sinon DCI correcte du médicament'}",
+    "nom": "nom commercial",
+    "dci": "dénomination commune internationale",
     "forme": "forme galénique (comprimé/gélule/solution injectable/etc)",
     "secable": true,
     "indication": "indication principale en 1-2 phrases",
@@ -148,11 +131,11 @@ Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou apr
     debut = texte.find("{")
     fin = texte.rfind("}") + 1
     resultat = json.loads(texte[debut:fin])
-    
+
     # Forcer la DCI officielle si disponible
     if dci_officielle:
         resultat["dci"] = dci_officielle
-    
+
     return resultat
 
 def analyser_interactions(medicaments):
@@ -187,7 +170,6 @@ IMPORTANT : N'inclus PAS les interactions mineures, uniquement modérées, sév�
 # Interface principale
 st.set_page_config(page_title="Assistant Pharmacie", page_icon="💊", layout="centered")
 
-# Style personnalisé
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
@@ -232,18 +214,20 @@ with onglet1:
 
     with st.form(key="recherche_form"):
         medicament = st.text_input("Nom du médicament (commercial ou DCI)",
-                                   placeholder="Ex: Paracétamol, Amoxicilline... puis Entrée")
+                                   placeholder="Ex: Paracétamol, Topalgic... puis Entrée")
         st.form_submit_button("🔍 Rechercher")
 
     if medicament:
         bdpm = chercher_bdpm(medicament)
-        if not bdpm:
+        dci_connue = NOMS_COMMERCIAUX.get(medicament.lower(), None)
+
+        if not bdpm and not dci_connue:
             st.warning("⚠️ Médicament non trouvé dans la base officielle BDPM. Les informations sont générées par IA — à vérifier avant tout usage clinique.")
 
         with st.spinner("Génération de la fiche..."):
             try:
                 fiche = analyser_medicament(medicament)
-                info_locale = BASE_LOCALE.get(fiche["dci"].lower(), None)
+                info_locale = BASE_NC.get(fiche["dci"].lower(), None)
 
                 icone = get_icone_forme(fiche["forme"])
                 st.markdown(f"## {icone} {fiche['nom']} — {fiche['dci']}")
