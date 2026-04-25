@@ -9,26 +9,9 @@ from base_locale import NOMS_COMMERCIAUX, BASE_NC
 load_dotenv()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-# Vérification mot de passe
-MOT_DE_PASSE = os.environ.get("PASSWORD", "")
-
-if "authentifie" not in st.session_state:
-    st.session_state.authentifie = False
-
-if not st.session_state.authentifie:
-    st.title("🔒 Accès restreint")
-    mdp = st.text_input("Mot de passe", type="password")
-    if st.button("Se connecter"):
-        if mdp == MOT_DE_PASSE:
-            st.session_state.authentifie = True
-            st.rerun()
-        else:
-            st.error("Mot de passe incorrect")
-    st.stop()
-
 # Icônes par forme galénique
 FORMES_ICONES = {
-    "comprimé": "⬜",
+    "comprimé": "⚪",
     "gélule": "💊",
     "solution injectable": "💉",
     "solution buvable": "🧴",
@@ -48,7 +31,16 @@ def get_icone_forme(forme):
 
 def chercher_bdpm(nom_medicament):
     try:
-        url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament}"
+        # Essai 1 — recherche directe
+        url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament.upper()}"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                return data[0]
+        
+        # Essai 2 — recherche en minuscules
+        url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament.lower()}"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
@@ -240,9 +232,9 @@ with onglet1:
                     st.success(f"**📋 Indication**\n\n{fiche['indication']}")
                     st.warning(f"**⚖️ Posologie standard**\n\n{fiche['posologie_standard']}")
                     st.warning(f"**🫘 Insuffisance rénale**\n\n{fiche['posologie_insuf_renale']}")
-                    st.info(f"**🚿 Administration**\n\n{fiche['administration']}")
+                    st.info(f"**👩🏻‍⚕️ Administration**\n\n{fiche['administration']}")
                 with col2:
-                    st.info(f"**❄️ Conservation**\n\n{fiche['conservation']}")
+                    st.info(f"**❄️☀️ Conservation**\n\n{fiche['conservation']}")
                     st.error(f"**⛔ Contre-indications**\n\n{fiche['contre_indications']}")
                     st.warning(f"**⚠️ Effets indésirables**\n\n{fiche['effets_indesirables']}")
 
