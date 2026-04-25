@@ -26,6 +26,9 @@ NOMS_COMMERCIAUX = {
     "zithromax": "azithromycine",
     "orelox": "cefpodoxime",
     "ciflox": "ciprofloxacine",
+    "advil": "ibuprofene",
+    "nurofen": "ibuprofene",
+    "brufen": "ibuprofene",
 }
 
 # Spécificités calédoniennes par DCI
