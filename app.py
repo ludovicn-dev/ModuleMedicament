@@ -5,6 +5,14 @@ import os
 import json
 from dotenv import load_dotenv
 from base_locale import NOMS_COMMERCIAUX, BASE_NC
+import unicodedata
+
+def normaliser(texte):
+    # Supprime les accents et met en minuscules
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', texte.lower())
+        if unicodedata.category(c) != 'Mn'
+    )
 
 load_dotenv()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -21,6 +29,26 @@ FORMES_ICONES = {
     "collyre": "👁️",
     "spray": "💨",
     "sachet": "📦",
+    # Nouvelles variantes
+    "solution ophtalmique": "👁️",
+    "pommade ophtalmique": "👁️",
+    "gel ophtalmique": "👁️",
+    "solution auriculaire": "👂",
+    "solution nasale": "👃",
+    "spray nasal": "👃",
+    "inhalation": "🫁",
+    "poudre pour inhalation": "🫁",
+    "sirop": "🧴",
+    "suspension buvable": "🧴",
+    "granules": "📦",
+    "lyophilisat": "💉",
+    "solution pour perfusion": "💉",
+    "poudre injectable": "💉",
+    "implant": "🩹",
+    "dispositif": "🩹",
+    "crème": "🫙",
+    "gel": "🫙",
+    "mousse": "🫙",
 }
 
 def get_icone_forme(forme):
@@ -63,6 +91,15 @@ def extraire_dci_bdpm(donnees_bdpm):
         return None
 
 def analyser_medicament(nom):
+    nom_normalise = normaliser(nom)
+    dci_locale = None
+    
+    # Recherche floue dans la base locale
+    for cle, dci in NOMS_COMMERCIAUX.items():
+        if normaliser(cle) == nom_normalise:
+            dci_locale = dci
+            break
+        
     # Vérifier dans la base locale des noms commerciaux
     dci_locale = NOMS_COMMERCIAUX.get(nom.lower(), None)
 
@@ -164,39 +201,142 @@ st.set_page_config(page_title="Assistant Pharmacie", page_icon="💊", layout="c
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
 
 p, h1, h2, h3, h4, input, button, label {
     font-family: 'Nunito', sans-serif !important;
 }
 
+h1, h2, h3 {
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 800;
+    color: #00695C;
+}
+
+/* Boutons */
 div.stButton > button {
     background-color: #00897B;
     color: white;
     border-radius: 12px;
     border: none;
-    padding: 10px 24px;
+    padding: 10px 28px;
     font-family: 'Nunito', sans-serif;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 16px;
-    transition: 0.3s;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,137,123,0.2);
 }
 
 div.stButton > button:hover {
     background-color: #00695C;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,137,123,0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(0,137,123,0.35);
 }
 
-h1, h2, h3 {
+div.stButton > button:active {
+    transform: translateY(0px);
+    box-shadow: 0 2px 8px rgba(0,137,123,0.2);
+}
+
+/* Carte principale médicament */
+div[data-testid="stMarkdownContainer"] h2 {
+    background: linear-gradient(135deg, #00897B 0%, #00695C 100%);
+    color: white !important;
+    padding: 16px 20px;
+    border-radius: 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 15px rgba(0,137,123,0.3);
+    animation: fadeInDown 0.5s ease;
+}
+
+/* Animation d'apparition des encarts */
+div[data-testid="stAlert"] {
+    animation: fadeInUp 0.4s ease;
+    border-radius: 12px !important;
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* Formulaire de recherche */
+div[data-testid="stForm"] {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0,137,123,0.1);
+    border: 1px solid #B2DFDB;
+}
+
+/* Onglets */
+div[data-testid="stTabs"] button {
     font-family: 'Nunito', sans-serif !important;
-    font-weight: 700;
-    color: #00695C;
+    font-weight: 700 !important;
+    font-size: 15px !important;
+}
+
+/* Expander */
+div[data-testid="stExpander"] {
+    border-radius: 12px !important;
+    border: 1px solid #B2DFDB !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+/* Input */
+div[data-testid="stTextInput"] input {
+    border-radius: 10px !important;
+    border: 1.5px solid #B2DFDB !important;
+    font-family: 'Nunito', sans-serif !important;
+    font-size: 15px !important;
+    transition: border 0.2s ease;
+}
+
+div[data-testid="stTextInput"] input:focus {
+    border-color: #00897B !important;
+    box-shadow: 0 0 0 3px rgba(0,137,123,0.15) !important;
+}
+
+/* Animations */
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0,137,123,0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(0,137,123,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,137,123,0); }
+}
+
+/* Spinner personnalisé */
+div[data-testid="stSpinner"] {
+    color: #00897B !important;
+}
+
+/* Caption disclaimer */
+div[data-testid="stCaptionContainer"] {
+    background: #FFF8E1;
+    border-radius: 8px;
+    padding: 8px 12px;
+    border-left: 3px solid #FFB300;
+}
+
+/* Divider */
+hr {
+    border-color: #B2DFDB !important;
+    margin: 20px 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💊 Assistant Pharmacie")
+st.markdown("""
+    <div style='text-align: center; padding: 10px 0 20px 0;'>
+        <h1 style='color: #00695C; font-size: 2.2rem;'>💊 Assistant Pharmacie</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 onglet1, onglet2 = st.tabs(["📋 Fiche Médicament", "⚠️ Interactions"])
 
