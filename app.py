@@ -268,6 +268,21 @@ Ne pose jamais plus d'une question à la fois.""",
     )
     return response.content[0].text
 
+import datetime
+
+FICHIER_MESSAGES = "messages.json"
+
+def charger_messages():
+    try:
+        with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def sauvegarder_messages(messages):
+    with open(FICHIER_MESSAGES, "w", encoding="utf-8") as f:
+        json.dump(messages, f, ensure_ascii=False, indent=2)
+
 # Interface principale
 st.set_page_config(page_title="Assistant Pharmacie", page_icon="💊", layout="centered")
 
@@ -410,7 +425,13 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-onglet1, onglet2, onglet3, onglet4 = st.tabs(["📋 Fiche Médicament", "⚠️ Interactions", "🔄 Équivalents", "💬 Chat Pharmacie"])
+onglet1, onglet2, onglet3, onglet4, onglet5 = st.tabs([
+    "📋 Fiche Médicament", 
+    "⚠️ Interactions", 
+    "🔄 Équivalents", 
+    "💬 Chat IA Pharmacie",
+    "📨 Messagerie Interne"
+])
 
 # ========== ONGLET 1 — FICHE MÉDICAMENT ==========
 with onglet1:
@@ -652,3 +673,114 @@ with onglet4:
 
     st.divider()
     st.caption("⚠️ Cet assistant est une aide à la décision. Toujours vérifier les informations avant tout acte clinique.")
+
+    # ========== ONGLET 5 — MESSAGERIE INTERNE ==========
+with onglet5:
+    
+    messages = charger_messages()
+    
+    # Choix du profil
+    profil = st.radio("👤 Vous êtes :", 
+                      ["🏥 Un service", "💊 La Pharmacie"],
+                      horizontal=True)
+    
+    st.divider()
+
+    # ===== VUE SERVICE =====
+    if profil == "🏥 Un service":
+        
+        service_msg = st.selectbox("🏥 Votre service", [
+            "🚨 Urgences",
+            "🫀 USC",
+            "🔪 Chirurgie Ambulatoire",
+            "💊 Oncologie Ambulatoire",
+            "🍼 Maternité",
+            "🏥 BOB",
+            "🦴 Chirurgie Orthopédique",
+            "🫁 Chirurgie Viscérale / Urologique",
+            "♿ SMR",
+            "🎗️ Oncologie Hospitalisation",
+            "🩸 Néphrologie",
+            "🏨 HDJ Polyvalent",
+        ])
+
+        st.markdown("### 📤 Envoyer un message à la Pharmacie")
+
+        with st.form(key="form_message"):
+            sujet = st.selectbox("Sujet", [
+                "❓ Question médicament",
+                "📦 Demande de stock",
+                "⚠️ Urgence / Besoin immédiat",
+                "🔄 Substitution / Équivalent",
+                "💊 Préparation spéciale",
+                "📋 Autre"
+            ])
+            contenu = st.text_area("Votre message", 
+                                   placeholder="Ex: Avez-vous du Noradrénaline en stock ? Patient en choc septique...")
+            envoyer = st.form_submit_button("📤 Envoyer")
+
+            if envoyer and contenu:
+                nouveau_message = {
+                    "id": len(messages) + 1,
+                    "service": service_msg,
+                    "sujet": sujet,
+                    "contenu": contenu,
+                    "date": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    "statut": "non lu",
+                    "reponse": None,
+                    "date_reponse": None
+                }
+                messages.append(nouveau_message)
+                sauvegarder_messages(messages)
+                st.success("✅ Message envoyé à la pharmacie !")
+
+        # Afficher les réponses reçues pour ce service
+        mes_messages = [m for m in messages if m["service"] == service_msg]
+        if mes_messages:
+            st.divider()
+            st.markdown("### 📬 Vos messages et réponses")
+            for msg in reversed(mes_messages):
+                with st.expander(f"{msg['sujet']} — {msg['date']} — {'✅ Répondu' if msg['reponse'] else '⏳ En attente'}"):
+                    st.write(f"**Votre message :** {msg['contenu']}")
+                    if msg["reponse"]:
+                        st.success(f"**💊 Réponse pharmacie ({msg['date_reponse']}) :** {msg['reponse']}")
+                    else:
+                        st.warning("⏳ En attente de réponse de la pharmacie")
+
+    # ===== VUE PHARMACIE =====
+    else:
+        st.markdown("### 📥 Messages reçus des services")
+        
+        messages_non_lus = [m for m in messages if m["statut"] == "non lu"]
+        messages_lus = [m for m in messages if m["statut"] == "lu"]
+        
+        if not messages:
+            st.info("📭 Aucun message pour le moment")
+        else:
+            if messages_non_lus:
+                st.error(f"📬 {len(messages_non_lus)} message(s) non lu(s)")
+            
+            for msg in reversed(messages):
+                statut_icon = "🔴" if msg["statut"] == "non lu" else "✅"
+                with st.expander(f"{statut_icon} {msg['service']} — {msg['sujet']} — {msg['date']}"):
+                    st.write(f"**Message :** {msg['contenu']}")
+                    
+                    if msg["reponse"]:
+                        st.success(f"**Votre réponse ({msg['date_reponse']}) :** {msg['reponse']}")
+                    else:
+                        with st.form(key=f"reponse_{msg['id']}"):
+                            reponse = st.text_area("Votre réponse")
+                            envoyer_rep = st.form_submit_button("📤 Répondre")
+                            
+                            if envoyer_rep and reponse:
+                                for m in messages:
+                                    if m["id"] == msg["id"]:
+                                        m["reponse"] = reponse
+                                        m["statut"] = "lu"
+                                        m["date_reponse"] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+                                sauvegarder_messages(messages)
+                                st.success("✅ Réponse envoyée !")
+                                st.rerun()
+
+    st.divider()
+    st.caption("📨 Messagerie interne — Assistant Pharmacie")

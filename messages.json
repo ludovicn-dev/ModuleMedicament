@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "service": "🚨 Urgences",
+    "sujet": "❓ Question médicament",
+    "contenu": "ça va ?",
+    "date": "26/04/2026 22:29",
+    "statut": "lu",
+    "reponse": "trankilou",
+    "date_reponse": "26/04/2026 22:30"
+  },
+  {
+    "id": 2,
+    "service": "🏥 BOB",
+    "sujet": "📦 Demande de stock",
+    "contenu": "spasfon ?",
+    "date": "26/04/2026 22:33",
+    "statut": "non lu",
+    "reponse": null,
+    "date_reponse": null
+  },
+  {
+    "id": 3,
+    "service": "💊 Oncologie Ambulatoire",
+    "sujet": "💊 Préparation spéciale",
+    "contenu": "poche ?",
+    "date": "26/04/2026 22:33",
+    "statut": "non lu",
+    "reponse": null,
+    "date_reponse": null
+  }
+]
