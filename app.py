@@ -3,21 +3,25 @@ import anthropic
 import requests
 import os
 import json
+import datetime
+import unicodedata
 from dotenv import load_dotenv
 from base_locale import NOMS_COMMERCIAUX, BASE_NC
-import unicodedata
 
+# ========== INITIALISATION ==========
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+FICHIER_MESSAGES = "messages.json"
+
+# ========== UTILITAIRES ==========
 def normaliser(texte):
-    # Supprime les accents et met en minuscules
     return ''.join(
         c for c in unicodedata.normalize('NFD', texte.lower())
         if unicodedata.category(c) != 'Mn'
     )
 
-load_dotenv()
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
-# Icônes par forme galénique
+# ========== ICÔNES ==========
 FORMES_ICONES = {
     "comprimé": "⚪",
     "gélule": "💊",
@@ -29,7 +33,6 @@ FORMES_ICONES = {
     "collyre": "👁️",
     "spray": "💨",
     "sachet": "📦",
-    # Nouvelles variantes
     "solution ophtalmique": "👁️",
     "pommade ophtalmique": "👁️",
     "gel ophtalmique": "👁️",
@@ -57,23 +60,16 @@ def get_icone_forme(forme):
             return icone
     return "💊"
 
+# ========== FONCTIONS BDPM ==========
 def chercher_bdpm(nom_medicament):
     try:
-        # Essai 1 — recherche directe
-        url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament.upper()}"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data and len(data) > 0:
-                return data[0]
-        
-        # Essai 2 — recherche en minuscules
-        url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={nom_medicament.lower()}"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data and len(data) > 0:
-                return data[0]
+        for variante in [nom_medicament.upper(), nom_medicament.lower(), nom_medicament]:
+            url = f"https://medicaments-api.giygas.dev/v1/medicament?denomination={variante}"
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    return data[0]
         return None
     except:
         return None
@@ -90,20 +86,18 @@ def extraire_dci_bdpm(donnees_bdpm):
     except:
         return None
 
+# ========== FONCTIONS IA ==========
 def analyser_medicament(nom):
+    # Recherche floue dans la base locale — CORRIGÉ
     nom_normalise = normaliser(nom)
     dci_locale = None
-    
-    # Recherche floue dans la base locale
+
     for cle, dci in NOMS_COMMERCIAUX.items():
         if normaliser(cle) == nom_normalise:
             dci_locale = dci
             break
-        
-    # Vérifier dans la base locale des noms commerciaux
-    dci_locale = NOMS_COMMERCIAUX.get(nom.lower(), None)
 
-    # Chercher dans la BDPM
+    # Chercher dans la BDPM avec la DCI si connue, sinon avec le nom
     donnees_bdpm = chercher_bdpm(dci_locale if dci_locale else nom)
     dci_officielle = dci_locale
 
@@ -161,7 +155,6 @@ Réponds UNIQUEMENT en JSON avec cette structure exacte, sans texte avant ou apr
     fin = texte.rfind("}") + 1
     resultat = json.loads(texte[debut:fin])
 
-    # Forcer la DCI officielle si disponible
     if dci_officielle:
         resultat["dci"] = dci_officielle
 
@@ -232,7 +225,6 @@ Réponds UNIQUEMENT en JSON sans texte avant ou après :
     return json.loads(texte[debut:fin])
 
 def chat_pharmacie(message, service, historique):
-    
     contextes_services = {
         "🚨 Urgences": "Tu réponds à un soignant des urgences. Privilégie les réponses rapides, pratiques et adaptées aux situations aiguës et à la prise en charge immédiate.",
         "🫀 USC (Unité de Soins Continus)": "Tu réponds à un soignant d'USC. Sois rigoureux sur les médicaments de surveillance rapprochée, les perfusions continues, les antidotes et la gestion hémodynamique.",
@@ -245,17 +237,16 @@ def chat_pharmacie(message, service, historique):
         "♿ SMR (Soins Médicaux et Réadaptation)": "Tu réponds à un soignant de SMR. Privilégie les questions sur la polymédication, les interactions médicamenteuses chez les patients chroniques, et l'adaptation des traitements au long cours.",
         "🎗️ Oncologie Hospitalisation": "Tu réponds à un soignant d'oncologie en hospitalisation. Sois précis sur les chimiothérapies, les soins de support, la gestion de la douleur oncologique et les urgences hématologiques.",
         "🩸 Néphrologie": "Tu réponds à un soignant de néphrologie. Sois rigoureux sur les adaptations posologiques en insuffisance rénale, la dialyse, les immunosuppresseurs et les néphrotoxiques à éviter.",
-        "💬 HDJ Polyvalent": "Tu réponds à un soignant d'HDJ polyvalent. Donne des réponses adaptées à une grande variété de pathologies et de traitements en ambulatoire.",
+        "🏨 HDJ Polyvalent": "Tu réponds à un soignant d'HDJ polyvalent. Donne des réponses adaptées à une grande variété de pathologies et de traitements en ambulatoire.",
     }
-    
-    contexte = contextes_services.get(service, contextes_services["💬 HDJ Polyvalent"])
-    
-    # Construction de l'historique pour Claude
+
+    contexte = contextes_services.get(service, contextes_services["🏨 HDJ Polyvalent"])
+
     messages = []
     for msg in historique:
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": message})
-    
+
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1000,
@@ -268,10 +259,7 @@ Ne pose jamais plus d'une question à la fois.""",
     )
     return response.content[0].text
 
-import datetime
-
-FICHIER_MESSAGES = "messages.json"
-
+# ========== MESSAGERIE ==========
 def charger_messages():
     try:
         with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
@@ -283,7 +271,7 @@ def sauvegarder_messages(messages):
     with open(FICHIER_MESSAGES, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=2)
 
-# Interface principale
+# ========== INTERFACE ==========
 st.set_page_config(page_title="Assistant Pharmacie", page_icon="💊", layout="centered")
 
 st.markdown("""
@@ -300,7 +288,6 @@ h1, h2, h3 {
     color: #00695C;
 }
 
-/* Boutons */
 div.stButton > button {
     background-color: #00897B;
     color: white;
@@ -325,7 +312,6 @@ div.stButton > button:active {
     box-shadow: 0 2px 8px rgba(0,137,123,0.2);
 }
 
-/* Carte principale médicament */
 div[data-testid="stMarkdownContainer"] h2 {
     background: linear-gradient(135deg, #00897B 0%, #00695C 100%);
     color: white !important;
@@ -336,7 +322,6 @@ div[data-testid="stMarkdownContainer"] h2 {
     animation: fadeInDown 0.5s ease;
 }
 
-/* Animation d'apparition des encarts */
 div[data-testid="stAlert"] {
     animation: fadeInUp 0.4s ease;
     border-radius: 12px !important;
@@ -344,7 +329,6 @@ div[data-testid="stAlert"] {
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
-/* Formulaire de recherche */
 div[data-testid="stForm"] {
     background: white;
     border-radius: 16px;
@@ -353,21 +337,18 @@ div[data-testid="stForm"] {
     border: 1px solid #B2DFDB;
 }
 
-/* Onglets */
 div[data-testid="stTabs"] button {
     font-family: 'Nunito', sans-serif !important;
     font-weight: 700 !important;
     font-size: 15px !important;
 }
 
-/* Expander */
 div[data-testid="stExpander"] {
     border-radius: 12px !important;
     border: 1px solid #B2DFDB !important;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-/* Input */
 div[data-testid="stTextInput"] input {
     border-radius: 10px !important;
     border: 1.5px solid #B2DFDB !important;
@@ -381,7 +362,6 @@ div[data-testid="stTextInput"] input:focus {
     box-shadow: 0 0 0 3px rgba(0,137,123,0.15) !important;
 }
 
-/* Animations */
 @keyframes fadeInDown {
     from { opacity: 0; transform: translateY(-20px); }
     to { opacity: 1; transform: translateY(0); }
@@ -392,18 +372,10 @@ div[data-testid="stTextInput"] input:focus {
     to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(0,137,123,0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(0,137,123,0); }
-    100% { box-shadow: 0 0 0 0 rgba(0,137,123,0); }
-}
-
-/* Spinner personnalisé */
 div[data-testid="stSpinner"] {
     color: #00897B !important;
 }
 
-/* Caption disclaimer */
 div[data-testid="stCaptionContainer"] {
     background: #FFF8E1;
     border-radius: 8px;
@@ -411,7 +383,6 @@ div[data-testid="stCaptionContainer"] {
     border-left: 3px solid #FFB300;
 }
 
-/* Divider */
 hr {
     border-color: #B2DFDB !important;
     margin: 20px 0 !important;
@@ -426,9 +397,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 onglet1, onglet2, onglet3, onglet4, onglet5 = st.tabs([
-    "📋 Fiche Médicament", 
-    "⚠️ Interactions", 
-    "🔄 Équivalents", 
+    "📋 Fiche Médicament",
+    "⚠️ Interactions",
+    "🔄 Équivalents",
     "💬 Chat IA Pharmacie",
     "📨 Messagerie Interne"
 ])
@@ -439,12 +410,17 @@ with onglet1:
 
     with st.form(key="recherche_form"):
         medicament = st.text_input("Nom du médicament (commercial ou DCI)",
-                                   placeholder="Ex: Paracétamol, Topalgic... puis Entrée")
+                                   placeholder="Ex: Paracétamol, Doliprane... puis Entrée")
         st.form_submit_button("🔍 Rechercher")
 
     if medicament:
         bdpm = chercher_bdpm(medicament)
-        dci_connue = NOMS_COMMERCIAUX.get(medicament.lower(), None)
+        dci_connue = None
+        nom_normalise = normaliser(medicament)
+        for cle, dci in NOMS_COMMERCIAUX.items():
+            if normaliser(cle) == nom_normalise:
+                dci_connue = dci
+                break
 
         if not bdpm and not dci_connue:
             st.warning("⚠️ Médicament non trouvé dans la base officielle BDPM. Les informations sont générées par IA — à vérifier avant tout usage clinique.")
@@ -565,7 +541,7 @@ with onglet2:
     st.divider()
     st.caption("⚠️ Cet outil est une aide à la décision. Les informations doivent toujours être vérifiées avant tout usage clinique.")
 
-    # ========== ONGLET 3 — ÉQUIVALENTS ==========
+# ========== ONGLET 3 — ÉQUIVALENTS ==========
 with onglet3:
     st.write("Trouvez les génériques et équivalents thérapeutiques d'un médicament.")
 
@@ -584,19 +560,16 @@ with onglet3:
                 st.markdown(f"## 🔄 {resultat['medicament']} — {resultat['dci']}")
                 st.info(f"**🏷️ Classe thérapeutique :** {resultat['classe']}")
 
-                # Génériques
                 if resultat.get("generiques"):
                     st.markdown("### 💊 Génériques disponibles")
                     for gen in resultat["generiques"]:
                         st.success(f"**{gen['nom']}** — {gen['laboratoire']} — {gen['dosage']}")
 
-                # Équivalents thérapeutiques
                 if resultat.get("equivalents_therapeutiques"):
                     st.markdown("### 🔁 Équivalents thérapeutiques")
                     for eq in resultat["equivalents_therapeutiques"]:
                         st.warning(f"**{eq['nom']}** ({eq['dci']})\n\n{eq['remarque']}")
 
-                # Conseil pharmacien
                 if resultat.get("conseil"):
                     st.divider()
                     st.info(f"💡 **Conseil pharmacien :** {resultat['conseil']}")
@@ -607,11 +580,10 @@ with onglet3:
     st.divider()
     st.caption("⚠️ Les équivalents proposés sont générés par IA. Toujours vérifier avant substitution.")
 
-    # ========== ONGLET 4 — CHAT PHARMACIE ==========
+# ========== ONGLET 4 — CHAT IA PHARMACIE ==========
 with onglet4:
     st.write("Posez vos questions pharmaceutiques selon votre service.")
 
-    # Sélection du service
     service = st.selectbox("🏥 Votre service", [
         "🚨 Urgences",
         "🫀 USC (Unité de Soins Continus)",
@@ -627,30 +599,25 @@ with onglet4:
         "🏨 HDJ Polyvalent",
     ])
 
-    # Initialisation de l'historique par service
     cle_historique = f"chat_{service}"
     if cle_historique not in st.session_state:
         st.session_state[cle_historique] = []
 
-    # Affichage de l'historique
     for msg in st.session_state[cle_historique]:
         if msg["role"] == "user":
             st.chat_message("user").write(msg["content"])
         else:
             st.chat_message("assistant").write(msg["content"])
 
-    # Zone de saisie
     question = st.chat_input("Posez votre question pharmaceutique...")
 
     if question:
-        # Ajouter la question à l'historique
         st.session_state[cle_historique].append({
             "role": "user",
             "content": question
         })
         st.chat_message("user").write(question)
 
-        # Obtenir la réponse
         with st.spinner("💬 Réflexion en cours..."):
             reponse = chat_pharmacie(
                 question,
@@ -658,15 +625,13 @@ with onglet4:
                 st.session_state[cle_historique][:-1]
             )
 
-        # Ajouter la réponse à l'historique
         st.session_state[cle_historique].append({
             "role": "assistant",
             "content": reponse
         })
         st.chat_message("assistant").write(reponse)
 
-    # Bouton pour effacer l'historique
-    if st.session_state[cle_historique]:
+    if st.session_state.get(cle_historique):
         if st.button("🗑️ Effacer la conversation"):
             st.session_state[cle_historique] = []
             st.rerun()
@@ -674,21 +639,19 @@ with onglet4:
     st.divider()
     st.caption("⚠️ Cet assistant est une aide à la décision. Toujours vérifier les informations avant tout acte clinique.")
 
-    # ========== ONGLET 5 — MESSAGERIE INTERNE ==========
+# ========== ONGLET 5 — MESSAGERIE INTERNE ==========
 with onglet5:
-    
+
     messages = charger_messages()
-    
-    # Choix du profil
-    profil = st.radio("👤 Vous êtes :", 
+
+    profil = st.radio("👤 Vous êtes :",
                       ["🏥 Un service", "💊 La Pharmacie"],
                       horizontal=True)
-    
+
     st.divider()
 
-    # ===== VUE SERVICE =====
     if profil == "🏥 Un service":
-        
+
         service_msg = st.selectbox("🏥 Votre service", [
             "🚨 Urgences",
             "🫀 USC",
@@ -715,7 +678,7 @@ with onglet5:
                 "💊 Préparation spéciale",
                 "📋 Autre"
             ])
-            contenu = st.text_area("Votre message", 
+            contenu = st.text_area("Votre message",
                                    placeholder="Ex: Avez-vous du Noradrénaline en stock ? Patient en choc septique...")
             envoyer = st.form_submit_button("📤 Envoyer")
 
@@ -734,7 +697,6 @@ with onglet5:
                 sauvegarder_messages(messages)
                 st.success("✅ Message envoyé à la pharmacie !")
 
-        # Afficher les réponses reçues pour ce service
         mes_messages = [m for m in messages if m["service"] == service_msg]
         if mes_messages:
             st.divider()
@@ -747,31 +709,29 @@ with onglet5:
                     else:
                         st.warning("⏳ En attente de réponse de la pharmacie")
 
-    # ===== VUE PHARMACIE =====
     else:
         st.markdown("### 📥 Messages reçus des services")
-        
+
         messages_non_lus = [m for m in messages if m["statut"] == "non lu"]
-        messages_lus = [m for m in messages if m["statut"] == "lu"]
-        
+
         if not messages:
             st.info("📭 Aucun message pour le moment")
         else:
             if messages_non_lus:
                 st.error(f"📬 {len(messages_non_lus)} message(s) non lu(s)")
-            
+
             for msg in reversed(messages):
                 statut_icon = "🔴" if msg["statut"] == "non lu" else "✅"
                 with st.expander(f"{statut_icon} {msg['service']} — {msg['sujet']} — {msg['date']}"):
                     st.write(f"**Message :** {msg['contenu']}")
-                    
+
                     if msg["reponse"]:
                         st.success(f"**Votre réponse ({msg['date_reponse']}) :** {msg['reponse']}")
                     else:
                         with st.form(key=f"reponse_{msg['id']}"):
                             reponse = st.text_area("Votre réponse")
                             envoyer_rep = st.form_submit_button("📤 Répondre")
-                            
+
                             if envoyer_rep and reponse:
                                 for m in messages:
                                     if m["id"] == msg["id"]:
